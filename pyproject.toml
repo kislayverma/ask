@@ -1,0 +1,32 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ask-cli"
+version = "0.1.0"
+description = "A local AI assistant that auto-routes queries to the right model on Apple Silicon"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    { name = "Kislay Verma" },
+]
+dependencies = [
+    "mlx>=0.18.0",
+    "mlx-lm>=0.20.0",
+    "mlx-vlm>=0.1.0",
+    "mlx-qwen3-asr>=0.3.0",
+    "pyyaml>=6.0",
+    "rich>=13.0",
+    "huggingface-hub>=0.20.0",
+]
+
+[project.scripts]
+ask = "ask.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+ask = ["model_profiles/*.yaml"]

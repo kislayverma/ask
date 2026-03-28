@@ -1,0 +1,28 @@
+# Model selections for Macs with 8GB unified memory.
+# Uses smallest models to leave headroom for macOS (~4-5GB available).
+
+classifier:
+  model: mlx-community/Phi-3.5-mini-instruct-4bit
+  type: mlx_lm
+  description: "Phi-3.5-mini 3.8B (4-bit) -- fast classifier, ~1.8GB"
+
+roles:
+  general:
+    model: mlx-community/Phi-3.5-mini-instruct-4bit
+    type: mlx_lm
+    description: "Phi-3.5-mini 3.8B (4-bit) -- same as classifier to save memory"
+
+  code:
+    model: mlx-community/Phi-3.5-mini-instruct-4bit
+    type: mlx_lm
+    description: "Phi-3.5-mini 3.8B (4-bit) -- decent coding for 8GB"
+
+  vision:
+    model: mlx-community/Qwen2.5-VL-7B-Instruct-4bit
+    type: mlx_vlm
+    description: "Qwen2.5-VL 7B (4-bit) -- tight but workable, ~5.9GB"
+
+  audio:
+    model: Qwen/Qwen3-ASR-0.6B
+    type: mlx_qwen3_asr
+    description: "Qwen3-ASR 0.6B -- lightweight ASR, ~0.6GB"

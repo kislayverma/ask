@@ -1,0 +1,1 @@
+Read the file ARCHITECTURE.md in the project root. This is the complete technical design document for the ask project. Internalize it fully -- the architecture, module responsibilities, data flows, known issues, and design decisions. Then confirm you have the context and are ready to work on the project.
