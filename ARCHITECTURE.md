@@ -133,6 +133,26 @@ Provides `ask models list|add|remove|download` subcommands. `add` writes a new e
 
 `_save_config()` preserves the comment header lines (hardware metadata written by `setup.sh`) when rewriting the YAML file.
 
+### 4.7 `model_discovery.py` -- Setup-Time Model Discovery
+
+Called by `setup.sh` during installation (as `python -m ask.model_discovery`). Queries the HuggingFace API to find the best current MLX models for each role, rather than using hardcoded tier profiles.
+
+**Discovery flow per role:**
+
+1. Queries `HfApi.list_models()` with `author="mlx-community"` and the appropriate `pipeline_tag` (e.g., `text-generation` for general/code, `image-text-to-text` for vision, `automatic-speech-recognition` for audio).
+2. Filters candidates by name heuristics: e.g., code models must contain "coder"/"code-" in the name; general models must NOT contain those terms.
+3. Estimates model size from safetensors metadata, sibling file sizes, or name-based heuristics (e.g., "8B-4bit" -> ~4.4GB at 0.55GB/billion params).
+4. Rejects candidates that exceed the memory budget (`total_RAM - classifier(1.8GB) - OS_overhead(4GB)`).
+5. Ranks remaining candidates by download count (proxy for community trust and quality).
+
+**Audio is tightly constrained.** The `mlx_qwen3_asr` framework only supports Qwen3-ASR models -- not Whisper, Parakeet, or other ASR architectures. The audio search requires "qwen3-asr" in the model name to avoid recommending incompatible models that would fail with parameter mismatch errors. If no matching model is found on `mlx-community`, the search falls back to the `Qwen` org with the same name constraint. This is the narrowest search of any role -- `mlx_lm` and `mlx_vlm` support broader (though not unlimited) sets of model architectures.
+
+**User interaction.** Presents the top recommendation per role and asks the user to accept or override. If the user declines, shows up to 3 alternatives per role. This is a "default + opt-in" UX: accepting defaults requires a single Enter keypress.
+
+**Offline fallback.** If the HuggingFace API is unreachable, falls back to the hardcoded tier profiles in `model_profiles/`. The tier profiles remain the safety net for offline installs.
+
+**Classifier is fixed.** The classifier model (Phi-3.5-mini) is not discovered dynamically. It's hardcoded in the module because changing it affects classification prompt tuning and is a release-level decision.
+
 ---
 
 ## 5. Model Choices & Rationale
@@ -248,6 +268,7 @@ ask/
     router.py                        # LLM-based query classification
     models.py                        # Model loading, caching, generation dispatch
     model_manager.py                 # `ask models` subcommand handlers
+    model_discovery.py               # HuggingFace API model discovery for setup
     model_profiles/
       tier_8gb.yaml                  # Default models for 8GB machines
       tier_16gb.yaml                 # Default models for 16GB machines
@@ -294,7 +315,7 @@ ask-cli
 4. **Venv creation.** Delete existing `~/.ask/venv/` if present. Create fresh with `python3 -m venv`.
 5. **Package install.** `pip install .` from the repo directory. This installs the `ask-cli` package and all its dependencies.
 6. **transformers downgrade.** `pip install "transformers>=4.45.0,<5.0"` to work around VLM compatibility (see Section 6.1).
-7. **Config write.** Copy the appropriate tier profile to `~/.ask/config.yaml` with hardware metadata comments.
+7. **Model discovery.** Runs `python -m ask.model_discovery` which queries HuggingFace for the latest MLX models, filters by memory budget, and presents recommendations. The user can accept defaults with one Enter keypress or override individual roles. Falls back to hardcoded tier profiles if the API is unreachable. Writes `~/.ask/config.yaml` with the selected models.
 8. **Classifier download.** `huggingface_hub.snapshot_download()` for Phi-3.5-mini (~2GB). This is the only model downloaded during setup; specialists are lazy-loaded on first use.
 9. **Shell alias.** Add `alias ask='~/.ask/venv/bin/ask'` to `.zshrc`, `.bashrc`, or `.profile`. Updates existing alias if present.
 10. **Smoke test.** Run `ask --version` to verify the installation.
@@ -390,6 +411,10 @@ Tried smaller options, but classification accuracy dropped on ambiguous queries.
 
 ### Why not use argparse subparsers for `ask models`?
 argparse subparsers don't mix well with `nargs="*"` positional arguments. If `models` were declared as a subparser, then `ask "tell me about models"` would try to invoke the `models` subcommand. The `sys.argv[1] == "models"` check is simple and unambiguous -- the word "models" as the first argument is always a subcommand, never a query.
+
+### Why HuggingFace API search instead of an LLM for model discovery?
+
+Considered using the local classifier LLM to recommend models during setup. Rejected because a 3.8B model cannot reliably: (a) know about models released after its training cutoff, (b) do accurate arithmetic on memory budgets, (c) verify that HuggingFace model IDs actually exist, or (d) determine framework compatibility (mlx_lm vs mlx_vlm). The HuggingFace API provides deterministic, verifiable data -- real download counts, real file sizes, real model IDs. The tier profiles remain as a fallback for offline installs where the API is unavailable.
 
 ### Why YAML config instead of JSON or TOML?
 YAML supports comments (JSON doesn't), and the config is simple enough that TOML's advantages don't matter. Comments let us embed hardware metadata and human-readable descriptions in the config file.
